@@ -8,8 +8,13 @@ use axum::{
     Router, Server,
 };
 use clap::Parser;
-use prometheus_client::{encoding::text::encode, metrics::gauge::Gauge, registry::Registry};
+use prometheus_client::{
+    encoding::{text::encode, EncodeLabelSet},
+    metrics::{family::Family, gauge::Gauge},
+    registry::Registry,
+};
 use reqwest::{multipart::Form, Error};
+use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
@@ -74,6 +79,12 @@ struct AppState {
     client: Client,
     registry: Arc<Registry>,
     production_watts: Gauge<f64, AtomicU64>,
+    inverter_production_watts: Family<InverterLabels, Gauge<f64, AtomicU64>>,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+struct InverterLabels {
+    serial_num: String,
 }
 
 impl AppState {
@@ -88,12 +99,21 @@ impl AppState {
             production_watts.clone(),
         );
 
+        let inverter_production_watts = Family::<InverterLabels, Gauge<f64, AtomicU64>>::default();
+
+        registry.register(
+            "enphase_envoy_inverter_production_watts",
+            "Last known production for inverters",
+            inverter_production_watts.clone(),
+        );
+
         let registry = Arc::new(registry);
 
         Self {
             client,
             registry,
             production_watts,
+            inverter_production_watts,
         }
     }
 }
@@ -106,6 +126,20 @@ async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
             .await
             .expect("error getting production value"),
     );
+
+    let inverter_production = state
+        .client
+        .inverter_production_watts()
+        .await
+        .expect("error getting inverter production");
+
+    for inverter in inverter_production {
+        let serial_num = inverter.serial_num;
+        state
+            .inverter_production_watts
+            .get_or_create(&InverterLabels { serial_num })
+            .set(inverter.last_known_watts);
+    }
 
     let mut buffer = String::new();
     encode(&mut buffer, &state.registry).expect("error encoding prometheus data");
@@ -208,22 +242,33 @@ impl Client {
     }
 
     async fn production_watts(&self) -> Result<f64, Error> {
+        self.get::<ProductionResponse>("/ivp/meters/reports/production")
+            .await
+            .map(|response| response.cumulative.current_watts)
+    }
+
+    async fn inverter_production_watts(&self) -> Result<Vec<InverterProduction>, Error> {
+        self.get::<Vec<InverterProduction>>("/api/v1/production/inverters")
+            .await
+    }
+
+    async fn get<R>(&self, path: &str) -> Result<R, Error>
+    where
+        R: DeserializeOwned,
+    {
         let token = self.token().await?;
 
         let response = self
             .client
-            .get(format!(
-                "https://{}/ivp/meters/reports/production",
-                self.hostname
-            ))
+            .get(format!("https://{}{}", self.hostname, path,))
             .bearer_auth(token)
             .send()
             .await?
             .error_for_status()?
-            .json::<ProductionResponse>()
+            .json::<R>()
             .await?;
 
-        Ok(response.cumulative.current_watts)
+        Ok(response)
     }
 }
 
@@ -248,4 +293,12 @@ struct ProductionResponse {
 struct CumulativeProduction {
     #[serde(rename = "currW")]
     current_watts: f64,
+}
+
+#[derive(Deserialize, Debug)]
+struct InverterProduction {
+    #[serde(rename = "serialNumber")]
+    serial_num: String,
+    #[serde(rename = "lastReportWatts")]
+    last_known_watts: f64,
 }

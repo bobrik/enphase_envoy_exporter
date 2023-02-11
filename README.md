@@ -11,7 +11,11 @@ to install a $50 clamp to enable consumption monitoring.
 
 ### `enphase_envoy_production_watts`
 
-Gauge for the current production power.
+Gauge for the current overall production power.
+
+### `enphase_envoy_inverter_production_watts`
+
+Gauge for individual inverters. This is only updated every ~5 minutes.
 
 ## Usage
 
@@ -70,6 +74,29 @@ Reading metrics:
 $ curl http://localhost:12345/metrics
 # HELP enphase_envoy_production_watts Currently produced watts.
 # TYPE enphase_envoy_production_watts gauge
-enphase_envoy_production_watts -0.0
-# EOF
+enphase_envoy_production_watts 5560.898
+# HELP enphase_envoy_inverter_production_watts Last known production for inverters.
+# TYPE enphase_envoy_inverter_production_watts gauge
+enphase_envoy_inverter_production_watts{serial_num="202239009733"} 267.0
+enphase_envoy_inverter_production_watts{serial_num="202238191756"} 265.0
+enphase_envoy_inverter_production_watts{serial_num="202239013851"} 267.0
+enphase_envoy_inverter_production_watts{serial_num="202238095906"} 266.0
+enphase_envoy_inverter_production_watts{serial_num="202239011899"} 266.0
+enphase_envoy_inverter_production_watts{serial_num="202239011303"} 264.0
+enphase_envoy_inverter_production_watts{serial_num="202239011907"} 267.0
+enphase_envoy_inverter_production_watts{serial_num="202239001025"} 270.0
+enphase_envoy_inverter_production_watts{serial_num="202238191847"} 266.0
+enphase_envoy_inverter_production_watts{serial_num="202238096260"} 268.0
+enphase_envoy_inverter_production_watts{serial_num="202239011781"} 271.0
+enphase_envoy_inverter_production_watts{serial_num="202238095895"} 266.0
+enphase_envoy_inverter_production_watts{serial_num="202239009311"} 267.0
+enphase_envoy_inverter_production_watts{serial_num="202239009716"} 270.0
+enphase_envoy_inverter_production_watts{serial_num="202238098494"} 268.0
+enphase_envoy_inverter_production_watts{serial_num="202239011356"} 266.0
+enphase_envoy_inverter_production_watts{serial_num="202239006012"} 271.0
+enphase_envoy_inverter_production_watts{serial_num="202239009103"} 268.0
+enphase_envoy_inverter_production_watts{serial_num="202239004791"} 271.0
+enphase_envoy_inverter_production_watts{serial_num="202238096277"} 270.0
+enphase_envoy_inverter_production_watts{serial_num="202238096234"} 266.0
+enphase_envoy_inverter_production_watts{serial_num="202239008941"} 267.0
 ```
