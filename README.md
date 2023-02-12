@@ -15,7 +15,14 @@ Gauge for the current overall production power.
 
 ### `enphase_envoy_inverter_production_watts`
 
-Gauge for individual inverters. This is only updated every ~5 minutes.
+Gauge for individual inverters. This is only updated every ~5 minutes
+and not necessarily at the same time for every inverter.
+
+### `enphase_envoy_lifetime_watt_hours_total`
+
+Counter for lifetime production in whole watt hours. This seems to be fed
+from individual inverters, so it's updated every ~5 minutes, but there might
+be intermediate updates due to inverters updating their non-simultaneously.
 
 ## Usage
 
@@ -99,4 +106,7 @@ enphase_envoy_inverter_production_watts{serial_num="202239004791"} 271.0
 enphase_envoy_inverter_production_watts{serial_num="202238096277"} 270.0
 enphase_envoy_inverter_production_watts{serial_num="202238096234"} 266.0
 enphase_envoy_inverter_production_watts{serial_num="202239008941"} 267.0
+# HELP enphase_envoy_lifetime_watt_hours_total Total amount of watt hours produced by the system.
+# TYPE enphase_envoy_lifetime_watt_hours_total counter
+enphase_envoy_lifetime_watt_hours_total_total 604093.0
 ```
