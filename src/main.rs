@@ -1,4 +1,7 @@
-use std::sync::{atomic::AtomicU64, Arc};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 
 use axum::{
     extract::State,
@@ -10,7 +13,7 @@ use axum::{
 use clap::Parser;
 use prometheus_client::{
     encoding::{text::encode, EncodeLabelSet},
-    metrics::{family::Family, gauge::Gauge},
+    metrics::{counter::Counter, family::Family, gauge::Gauge},
     registry::Registry,
 };
 use reqwest::{multipart::Form, Error};
@@ -80,6 +83,7 @@ struct AppState {
     registry: Arc<Registry>,
     production_watts: Gauge<f64, AtomicU64>,
     inverter_production_watts: Family<InverterLabels, Gauge<f64, AtomicU64>>,
+    lifetime_watt_hours: Counter<f64, AtomicU64>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
@@ -107,6 +111,14 @@ impl AppState {
             inverter_production_watts.clone(),
         );
 
+        let lifetime_watt_hours = Counter::<f64, AtomicU64>::default();
+
+        registry.register(
+            "enphase_envoy_lifetime_watt_hours_total",
+            "Total amount of watt hours produced by the system",
+            lifetime_watt_hours.clone(),
+        );
+
         let registry = Arc::new(registry);
 
         Self {
@@ -114,6 +126,7 @@ impl AppState {
             registry,
             production_watts,
             inverter_production_watts,
+            lifetime_watt_hours,
         }
     }
 }
@@ -140,6 +153,16 @@ async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
             .get_or_create(&InverterLabels { serial_num })
             .set(inverter.last_known_watts);
     }
+
+    state.lifetime_watt_hours.inner().store(
+        state
+            .client
+            .lifetime_watt_hours()
+            .await
+            .expect("error getting lifetime production value")
+            .to_bits(),
+        Ordering::Relaxed,
+    );
 
     let mut buffer = String::new();
     encode(&mut buffer, &state.registry).expect("error encoding prometheus data");
@@ -252,6 +275,19 @@ impl Client {
             .await
     }
 
+    async fn lifetime_watt_hours(&self) -> Result<f64, Error> {
+        self.get::<CumulativeProductionResponse>("/production.json")
+            .await
+            .map(|response| {
+                response
+                    .production
+                    .into_iter()
+                    .find(|item| item.kind == "inverters")
+                    .map(|item| item.lifetime_watt_hours)
+                    .unwrap_or_default()
+            })
+    }
+
     async fn get<R>(&self, path: &str) -> Result<R, Error>
     where
         R: DeserializeOwned,
@@ -301,4 +337,17 @@ struct InverterProduction {
     serial_num: String,
     #[serde(rename = "lastReportWatts")]
     last_known_watts: f64,
+}
+
+#[derive(Deserialize, Debug)]
+struct CumulativeProductionResponse {
+    production: Vec<CumulativeProductionResponseItem>,
+}
+
+#[derive(Deserialize, Debug)]
+struct CumulativeProductionResponseItem {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(rename = "whLifetime")]
+    lifetime_watt_hours: f64,
 }
