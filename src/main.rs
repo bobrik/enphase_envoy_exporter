@@ -11,6 +11,7 @@ use axum::{
     Router, Server,
 };
 use clap::Parser;
+use futures::future::join_all;
 use prometheus_client::{
     encoding::{text::encode, EncodeLabelSet},
     metrics::{counter::Counter, family::Family, gauge::Gauge},
@@ -19,7 +20,7 @@ use prometheus_client::{
 use reqwest::{multipart::Form, Error};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
-use tokio::sync::Mutex;
+use tokio::{spawn, sync::Mutex};
 
 const DEFAULT_PROMETHEUS_BIND_ADDR: &str = "[::1]:12345";
 
@@ -132,37 +133,53 @@ impl AppState {
 }
 
 async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
-    state.production_watts.set(
-        state
-            .client
-            .production_watts()
-            .await
-            .expect("error getting production value"),
-    );
+    let mut updates = vec![];
 
-    let inverter_production = state
-        .client
-        .inverter_production_watts()
-        .await
-        .expect("error getting inverter production");
+    updates.push(spawn({
+        let client = state.client.clone();
+        async move {
+            state.production_watts.set(
+                client
+                    .production_watts()
+                    .await
+                    .expect("error getting production value"),
+            );
+        }
+    }));
 
-    for inverter in inverter_production {
-        let serial_num = inverter.serial_num;
-        state
-            .inverter_production_watts
-            .get_or_create(&InverterLabels { serial_num })
-            .set(inverter.last_known_watts);
-    }
+    updates.push(spawn({
+        let client = state.client.clone();
+        async move {
+            let inverter_production = client
+                .inverter_production_watts()
+                .await
+                .expect("error getting inverter production");
 
-    state.lifetime_watt_hours.inner().store(
-        state
-            .client
-            .lifetime_watt_hours()
-            .await
-            .expect("error getting lifetime production value")
-            .to_bits(),
-        Ordering::Relaxed,
-    );
+            for inverter in inverter_production {
+                let serial_num = inverter.serial_num;
+                state
+                    .inverter_production_watts
+                    .get_or_create(&InverterLabels { serial_num })
+                    .set(inverter.last_known_watts);
+            }
+        }
+    }));
+
+    updates.push(spawn({
+        let client = state.client.clone();
+        async move {
+            state.lifetime_watt_hours.inner().store(
+                client
+                    .lifetime_watt_hours()
+                    .await
+                    .expect("error getting lifetime production value")
+                    .to_bits(),
+                Ordering::Relaxed,
+            );
+        }
+    }));
+
+    join_all(updates).await;
 
     let mut buffer = String::new();
     encode(&mut buffer, &state.registry).expect("error encoding prometheus data");
