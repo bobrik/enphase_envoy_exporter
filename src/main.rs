@@ -115,7 +115,7 @@ impl AppState {
         let lifetime_watt_hours = Counter::<f64, AtomicU64>::default();
 
         registry.register(
-            "enphase_envoy_lifetime_watt_hours_total",
+            "enphase_envoy_lifetime_watt_hours",
             "Total amount of watt hours produced by the system",
             lifetime_watt_hours.clone(),
         );
