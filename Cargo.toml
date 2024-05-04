@@ -1,15 +1,15 @@
 [package]
 name = "enphase_envoy_exporter"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
 clap = { version = "4", default-features = false, features = ["std", "derive", "env", "color", "usage", "help"] }
-axum = { version = "0.6", default-features = false, features = ["http1", "tokio"] }
-tokio = { version = "1.25", default-features = false, features = ["macros", "rt"] }
+axum = { version = "0.7", default-features = false, features = ["http1", "tokio"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt"] }
 futures = { version = "0.3", default-features = false }
-reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "multipart", "json"] }
-serde = { version = "1.0", default-features = false }
-serde_json = { version = "1.0", default-features = false, features = ["std"] }
-serde_derive = { version = "1.0", default-features = false }
-prometheus-client = { version = "0.19", default-features = false }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart", "json"] }
+serde = { version = "1", default-features = false }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+serde_derive = { version = "1", default-features = false }
+prometheus-client = { version = "0.22", default-features = false }

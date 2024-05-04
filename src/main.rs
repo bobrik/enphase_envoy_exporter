@@ -8,7 +8,7 @@ use axum::{
     http::{HeaderMap, HeaderValue},
     response::IntoResponse,
     routing::get,
-    Router, Server,
+    Router,
 };
 use clap::Parser;
 use futures::future::join_all;
@@ -20,7 +20,7 @@ use prometheus_client::{
 use reqwest::{multipart::Form, Error};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
-use tokio::{spawn, sync::Mutex};
+use tokio::{net::TcpListener, spawn, sync::Mutex};
 
 const DEFAULT_PROMETHEUS_BIND_ADDR: &str = "[::1]:12345";
 
@@ -61,19 +61,17 @@ async fn main() {
         &args.envoy_serial,
     );
 
-    let addr = args
-        .listen_address
-        .parse()
-        .expect("error parsing listen address");
-
-    eprintln!("listening on {}", args.listen_address);
+    eprintln!("listening on {}", &args.listen_address);
 
     let app = Router::new()
         .route("/metrics", get(metrics))
         .with_state(AppState::new(client));
 
-    Server::bind(&addr)
-        .serve(app.into_make_service())
+    let listener = TcpListener::bind(&args.listen_address)
+        .await
+        .expect("error binding to the listen address");
+
+    axum::serve(listener, app)
         .await
         .expect("error running server");
 }
